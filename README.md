@@ -57,6 +57,21 @@
 
 > EfficientAD 需要真正的梯度训练,CPU 上过慢,留待 GPU 环境补测(见 Roadmap)。
 
+### 3.3 从机械视角解读缺陷(Week 3)
+
+按缺陷类型拆解模型表现,用机械加工知识解释"为什么某些缺陷更难检":
+
+| 缺陷类型 | 检出率 | 空间性质 | 机械解读 |
+|---|---|---|---|
+| flip(翻面) | 100% | 全局/整件 | 装夹朝向错误,整件偏离正常 → 最易检 |
+| color(色差) | 64% | 局部 | 局部变色,看与底色对比度 |
+| bent(弯曲) | 60% | 局部几何 | 局部塑性变形,看幅度/角度 |
+| scratch(划痕) | 61% | 细小局部 | 低对比度细线痕,被大面积正常区稀释 → 最难检 |
+
+**关键洞察**:高 Image AUROC(~0.93)掩盖了细小局部缺陷(scratch/bent)在固定阈值下约 40% 的漏检——评估要分类型看,小目标缺陷要靠 Pixel AUROC 与更强定位的模型(PatchCore Pixel AUROC 0.987)。
+
+→ 完整分析:[docs/defect_analysis.md](docs/defect_analysis.md)
+
 ## 4. 复现
 
 ```bash
@@ -85,7 +100,7 @@ set PYTHONUTF8=1 && python scripts/run_compare.py
 
 - [x] **W1** baseline(PaDiM)
 - [x] **W2** 多模型对比 + 选型(PaDiM vs PatchCore)
-- [ ] **W3** 聚焦金属类别,从机械视角解读缺陷特征(毛刺/划痕/边缘),扩展更多品类验证泛化
+- [x] **W3** 从机械视角解读缺陷特征(逐类型检出分析 → [docs/defect_analysis.md](docs/defect_analysis.md))
 - [ ] **W4** 边缘部署:OpenVINO/ONNX 导出,测延迟与精度损失,实时推理 demo
 - [ ] **W5** VLM 诊断层:对检出缺陷输出"类型 + 成因"自然语言分析(多模态亮点)
 - [ ] **W6** 收尾:评测报告 + demo 视频 + GPU 上补测 EfficientAD
