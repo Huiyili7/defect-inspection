@@ -1,0 +1,19 @@
+# 数据集: MVTec AD 许可禁止再分发, 且体积大 — 不入库 (见 README 用 HF 镜像获取)
+datasets/
+
+# 训练产物: checkpoint 体积大 (>100MB, 超 GitHub 限制), 全量热力图也很多
+results/
+
+# 但保留少量精选示例图供 README 展示 (见 assets/)
+!assets/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# 系统
+.DS_Store
+Thumbs.db

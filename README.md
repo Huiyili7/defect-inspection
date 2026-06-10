@@ -1,0 +1,93 @@
+# Industrial Defect Inspection — 工业缺陷检测
+
+基于 [Anomalib](https://github.com/openvinotoolkit/anomalib) 的**无监督**工业缺陷检测系统。
+只用正常(good)样本训练,学习"正常分布",检测并定位偏离正常的缺陷区域 —— 贴合产线"缺陷样本稀少、形态多样、难以标注"的现实。
+
+聚焦 **MVTec AD 的金属加工件类别(metal_nut 等)**,从机械制造视角解读缺陷特征。
+
+> 状态:Week 1(baseline)+ Week 2(多模型对比选型)已完成,全程 **CPU**。
+
+---
+
+## 1. 问题与方法
+
+- **范式**:无监督异常检测。训练集仅含 220 张正常金属螺母,模型学习正常特征分布;测试时凡偏离即判为异常,并输出像素级热力图定位缺陷。
+- **为什么不用监督分类**:工业缺陷样本稀少且形态千变万化(毛刺、划痕、弯曲、色差…),标注覆盖不全;只学"正常"更鲁棒、更贴近产线。
+- **评测指标**:Image AUROC(整图判别)、Pixel AUROC(像素级定位)、F1。工业上漏检代价 >> 误检,实际部署阈值偏向高 Recall。
+
+## 2. 数据集
+
+[MVTec AD](https://www.mvtec.com/company/research/datasets/mvtec-ad) — `metal_nut` 类别(金属螺母,真实机加工件):
+
+| split | 数量 | 说明 |
+|---|---|---|
+| train/good | 220 | 仅正常样本 |
+| test | 115 | good + 4 类缺陷:bent / color / flip / scratch |
+| ground_truth | — | 像素级缺陷掩码 |
+
+## 3. 结果
+
+### 3.1 Baseline(Week 1)— PaDiM 缺陷定位
+
+模型只看正常样本,即可在测试图上准确高亮缺陷区域。每张图四联:`原图 | 真实掩码 | 异常热力图 | 预测掩码`。
+
+| 缺陷类型 | PaDiM | PatchCore |
+|---|---|---|
+| bent(弯曲) | ![](assets/padim_bent.png) | ![](assets/patchcore_bent.png) |
+| scratch(划痕) | ![](assets/padim_scratch.png) | ![](assets/patchcore_scratch.png) |
+| color(色差) | ![](assets/padim_color.png) | ![](assets/patchcore_color.png) |
+
+> 全量 115 张热力图在 `results/`(本地生成,未入库)。
+
+### 3.2 多模型对比(Week 2)— 工程取舍
+
+同一品类、同一 CPU 下对比 PaDiM 与 PatchCore:
+
+| 模型 | Image AUROC | Pixel AUROC | Image F1 | Pixel F1 | 拟合耗时 | 推理延迟/张¹ | 模型体积 |
+|---|---|---|---|---|---|---|---|
+| **PaDiM** | 0.937 | 0.946 | 0.930 | 0.665 | **35 s** | **169 ms** | 168 MB |
+| **PatchCore** | **0.997** | **0.987** | **0.984** | **0.839** | 6200 s (~103 min) | 1422 ms | 227 MB |
+
+¹ 端到端延迟,含预处理/后处理与热力图写盘 I/O(非纯前向推理)。
+
+**选型结论:**
+- **PatchCore = 精度天花板**:Image AUROC 0.997 近乎满分,但 CPU 上 coreset 内存库构建为 O(n²),拟合耗时 ~100 分钟、单张推理 1.4 s —— **不适合实时/边缘部署**。
+- **PaDiM = 轻量实时**:拟合 35 s、推理 169 ms,精度低一档但工程上更可落地。
+- **一句话**:精度优先且算力充足 → PatchCore;实时 / 边缘受限 → PaDiM(或后续 EfficientAD)。精度与算力的权衡取决于部署约束。
+
+> EfficientAD 需要真正的梯度训练,CPU 上过慢,留待 GPU 环境补测(见 Roadmap)。
+
+## 4. 复现
+
+```bash
+# 环境 (Windows / Python 3.13)
+pip install anomalib "pandas<3"          # 注意必须 pandas<3 (见踩坑记录)
+
+# 数据: 放到 datasets/MVTecAD/metal_nut/  (anomalib 自带下载链接已失效, 用 HF 镜像)
+#   huggingface: MSherbinii/mvtec-ad-metal-nut
+
+# 跑 baseline
+set PYTHONUTF8=1 && python scripts/run_padim.py
+
+# 跑多模型对比 (生成 results/comparison.md)
+set PYTHONUTF8=1 && python scripts/run_compare.py
+```
+
+## 5. 踩坑记录(工程细节)
+
+| 问题 | 原因 | 解决 |
+|---|---|---|
+| MVTec 自动下载 404 | anomalib 内置的 mydrive.ch 链接已失效 | 改用 Hugging Face 镜像,按标准目录结构放置后框架自动识别 |
+| `num_samples=0` 训练为空 | **pandas 3.0** 改变了字符串枚举与 DataFrame 列的比较行为,anomalib 的 `Split` 过滤全空 | 降级 `pandas<3` |
+| Windows `UnicodeEncodeError` | GBK 控制台无法渲染 rich 进度条的 `•` | `PYTHONUTF8=1` + `enable_progress_bar=False` |
+
+## 6. 局限与下一步(Roadmap)
+
+- [x] **W1** baseline(PaDiM)
+- [x] **W2** 多模型对比 + 选型(PaDiM vs PatchCore)
+- [ ] **W3** 聚焦金属类别,从机械视角解读缺陷特征(毛刺/划痕/边缘),扩展更多品类验证泛化
+- [ ] **W4** 边缘部署:OpenVINO/ONNX 导出,测延迟与精度损失,实时推理 demo
+- [ ] **W5** VLM 诊断层:对检出缺陷输出"类型 + 成因"自然语言分析(多模态亮点)
+- [ ] **W6** 收尾:评测报告 + demo 视频 + GPU 上补测 EfficientAD
+
+**已知局限**:用的是公开数据,真实产线需做域适应微调;当前延迟含可视化 I/O,后续应单独测纯推理 FPS。
