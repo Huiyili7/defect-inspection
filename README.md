@@ -72,20 +72,42 @@
 
 → 完整分析:[docs/defect_analysis.md](docs/defect_analysis.md)
 
+### 3.4 边缘部署(Week 4)— ONNX Runtime CPU 推理
+
+把 PaDiM 导出为部署格式,端到端逐张推理(读图→预处理→推理→判定,batch=1,模拟产线单件):
+
+| 后端 | 平均延迟 | 吞吐 | Image AUROC |
+|---|---|---|---|
+| PyTorch (CPU) | 189.4 ms | 5.3 FPS | 0.9482 |
+| **ONNX Runtime (CPU)** | **132.9 ms** | **7.5 FPS** | 0.9482 |
+
+- ONNX Runtime 相比 PyTorch **≈1.43× 加速**,且 **AUROC 完全一致(导出无精度损失)**。
+- 实时 demo:单张缺陷图 → 「异常(NG)」,异常分 0.702,~72 ms。
+- 验证导出正确性时踩了"双重预处理"坑(ONNX 图已内置 Resize+Normalize),靠**与参考实现逐位对齐分数**定位。
+- OpenVINO 暂无 Python 3.13 Windows wheel,故用 ONNX Runtime(详见文档)。
+
+→ 完整部署报告:[docs/deployment.md](docs/deployment.md)
+
 ## 4. 复现
 
 ```bash
 # 环境 (Windows / Python 3.13)
 pip install anomalib "pandas<3"          # 注意必须 pandas<3 (见踩坑记录)
+pip install onnxruntime onnx             # W4 边缘部署用
 
 # 数据: 放到 datasets/MVTecAD/metal_nut/  (anomalib 自带下载链接已失效, 用 HF 镜像)
 #   huggingface: MSherbinii/mvtec-ad-metal-nut
 
-# 跑 baseline
-set PYTHONUTF8=1 && python scripts/run_padim.py
+set PYTHONUTF8=1                          # Windows 中文控制台必需
 
-# 跑多模型对比 (生成 results/comparison.md)
-set PYTHONUTF8=1 && python scripts/run_compare.py
+python scripts/run_padim.py              # W1 baseline
+python scripts/run_compare.py            # W2 多模型对比 -> results/comparison.md
+python scripts/run_defect_analysis.py    # W3 逐缺陷分析 -> results/defect_analysis.md
+
+# W4 部署基准 (导出 + 推理): 需额外两个环境变量
+#   TRUST_REMOTE_CODE=1  -> 允许加载自己导出的 .pt (pickle)
+#   HF_HUB_OFFLINE=1     -> 用缓存 backbone, 避免网络抖动
+set TRUST_REMOTE_CODE=1 && set HF_HUB_OFFLINE=1 && python scripts/run_deploy.py
 ```
 
 ## 5. 踩坑记录(工程细节)
@@ -95,13 +117,15 @@ set PYTHONUTF8=1 && python scripts/run_compare.py
 | MVTec 自动下载 404 | anomalib 内置的 mydrive.ch 链接已失效 | 改用 Hugging Face 镜像,按标准目录结构放置后框架自动识别 |
 | `num_samples=0` 训练为空 | **pandas 3.0** 改变了字符串枚举与 DataFrame 列的比较行为,anomalib 的 `Split` 过滤全空 | 降级 `pandas<3` |
 | Windows `UnicodeEncodeError` | GBK 控制台无法渲染 rich 进度条的 `•` | `PYTHONUTF8=1` + `enable_progress_bar=False` |
+| ONNX AUROC 退化到 0.5 | 导出的 ONNX 图已内置 Resize+Normalize,我又手动预处理 → **双重预处理**,分数全饱和 | 只喂原尺寸 `[0,1]` 图;靠与 TorchInferencer 分数逐位对齐定位 |
+| 加载 `.pt` 被拒 / backbone 下载 10054 | pickle 安全限制;HF 网络抖动 | `TRUST_REMOTE_CODE=1`;`HF_HUB_OFFLINE=1` 用缓存 |
 
 ## 6. 局限与下一步(Roadmap)
 
 - [x] **W1** baseline(PaDiM)
 - [x] **W2** 多模型对比 + 选型(PaDiM vs PatchCore)
 - [x] **W3** 从机械视角解读缺陷特征(逐类型检出分析 → [docs/defect_analysis.md](docs/defect_analysis.md))
-- [ ] **W4** 边缘部署:OpenVINO/ONNX 导出,测延迟与精度损失,实时推理 demo
+- [x] **W4** 边缘部署:ONNX 导出 + CPU 推理基准(1.43× 加速,精度无损)→ [docs/deployment.md](docs/deployment.md)
 - [ ] **W5** VLM 诊断层:对检出缺陷输出"类型 + 成因"自然语言分析(多模态亮点)
 - [ ] **W6** 收尾:评测报告 + demo 视频 + GPU 上补测 EfficientAD
 
