@@ -14,6 +14,9 @@ __pycache__/
 .venv/
 venv/
 
+# 个人面试材料 (不公开)
+docs/_interview_prep.md
+
 # 系统
 .DS_Store
 Thumbs.db
