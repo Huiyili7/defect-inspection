@@ -88,6 +88,19 @@
 
 → 完整部署报告:[docs/deployment.md](docs/deployment.md)
 
+### 3.5 VLM 诊断层(Week 5)— 检测 + 自然语言诊断
+
+检测到缺陷后,把"整图 + 缺陷框 + 缺陷知识库"喂给 **Qwen2.5-VL(DashScope qwen-vl-max)**,输出缺陷类型 + 机械成因 + 处理建议:
+
+![vlm](assets/vlm_bent_annotated.png)
+
+> **bent 真实诊断**:1) 缺陷类型:bent(弯曲) 2) 成因:冲压成形受力不均/模具磨损导致边缘塑性变形 3) 建议:检查模具状态、优化压料力分布。
+
+- **关键发现**:只喂紧裁剪时 bent 被误判为 color——几何类缺陷必须保留**整体轮廓上下文**;改喂整图+框后判断正确。说明 VLM 诊断质量高度依赖输入构造。
+- **幻觉控制**:检测先行(已知有缺陷+定位)→ 知识库接地(RAG)→ 结构化输出 → 抽样人工核对。
+
+→ 完整说明:[docs/vlm_diagnosis.md](docs/vlm_diagnosis.md)
+
 ## 4. 复现
 
 ```bash
@@ -108,6 +121,10 @@ python scripts/run_defect_analysis.py    # W3 逐缺陷分析 -> results/defect_
 #   TRUST_REMOTE_CODE=1  -> 允许加载自己导出的 .pt (pickle)
 #   HF_HUB_OFFLINE=1     -> 用缓存 backbone, 避免网络抖动
 set TRUST_REMOTE_CODE=1 && set HF_HUB_OFFLINE=1 && python scripts/run_deploy.py
+
+# W5 VLM 诊断 (检测+定位+VLM): 需 DashScope key (未设则 mock 兜底)
+pip install openai
+set DASHSCOPE_API_KEY=sk-xxx && set TRUST_REMOTE_CODE=1 && python scripts/run_vlm_diagnosis.py [图片路径]
 ```
 
 ## 5. 踩坑记录(工程细节)
@@ -126,7 +143,7 @@ set TRUST_REMOTE_CODE=1 && set HF_HUB_OFFLINE=1 && python scripts/run_deploy.py
 - [x] **W2** 多模型对比 + 选型(PaDiM vs PatchCore)
 - [x] **W3** 从机械视角解读缺陷特征(逐类型检出分析 → [docs/defect_analysis.md](docs/defect_analysis.md))
 - [x] **W4** 边缘部署:ONNX 导出 + CPU 推理基准(1.43× 加速,精度无损)→ [docs/deployment.md](docs/deployment.md)
-- [ ] **W5** VLM 诊断层:对检出缺陷输出"类型 + 成因"自然语言分析(多模态亮点)
+- [x] **W5** VLM 诊断层:检测→定位→Qwen2.5-VL 输出类型/成因/建议 → [docs/vlm_diagnosis.md](docs/vlm_diagnosis.md)
 - [ ] **W6** 收尾:评测报告 + demo 视频 + GPU 上补测 EfficientAD
 
 **已知局限**:用的是公开数据,真实产线需做域适应微调;当前延迟含可视化 I/O,后续应单独测纯推理 FPS。
