@@ -144,6 +144,6 @@ set DASHSCOPE_API_KEY=sk-xxx && set TRUST_REMOTE_CODE=1 && python scripts/run_vl
 - [x] **W3** 从机械视角解读缺陷特征(逐类型检出分析 → [docs/defect_analysis.md](docs/defect_analysis.md))
 - [x] **W4** 边缘部署:ONNX 导出 + CPU 推理基准(1.43× 加速,精度无损)→ [docs/deployment.md](docs/deployment.md)
 - [x] **W5** VLM 诊断层:检测→定位→Qwen2.5-VL 输出类型/成因/建议 → [docs/vlm_diagnosis.md](docs/vlm_diagnosis.md)
-- [ ] **W6** 收尾:评测报告 + demo 视频 + GPU 上补测 EfficientAD
+- [x] **W6** 整合评测报告 → [docs/evaluation_report.md](docs/evaluation_report.md);demo 视频 + GPU 补测 EfficientAD 待补
 
 **已知局限**:用的是公开数据,真实产线需做域适应微调;当前延迟含可视化 I/O,后续应单独测纯推理 FPS。
